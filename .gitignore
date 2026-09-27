@@ -1,0 +1,13 @@
+node_modules
+# Keep environment variables out of version control
+.env
+
+/src/generated/prisma
+
+# Docs/reference files — not part of the codebase itself
+*.md
+*.xlsx
+*.xls
+*.docx
+*.doc
+*.pdf
