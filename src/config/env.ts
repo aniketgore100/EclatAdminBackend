@@ -8,9 +8,10 @@ const envSchema = z.object({
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
 
   JWT_ACCESS_SECRET: z.string().min(32, "JWT_ACCESS_SECRET must be at least 32 characters"),
-  JWT_ACCESS_TTL: z.string().default("15m"),
-  // Shorter than the storefront's customer session TTL (30 days) — admin
-  // access is more sensitive, shorter-lived sessions are the safer default.
+  // 7 days — the admin frontend has no refresh-and-retry-on-401 flow yet
+  // (only a refresh-on-page-load check), so a short TTL meant every ~15min
+  // of active use logged the admin out mid-task. Revisit once that's built.
+  JWT_ACCESS_TTL: z.string().default("7d"),
   REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().positive().default(7),
 
   // S3 image upload — optional at boot; the upload endpoint fails clearly

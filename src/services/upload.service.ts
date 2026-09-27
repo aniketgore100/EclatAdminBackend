@@ -33,6 +33,13 @@ export const uploadService = {
     return `${prefix}/${crypto.randomUUID()}${this.extFor(contentType)}`;
   },
 
+  // Deterministic key (no random UUID) — re-uploading overwrites the same S3
+  // object instead of accumulating a new one every time, for slots that hold
+  // exactly one image (e.g. a product's primary photo).
+  buildStableKey(prefix: string, name: string, contentType: string): string {
+    return `${prefix}/${name}${this.extFor(contentType)}`;
+  },
+
   buildPublicUrl(key: string): string {
     assertConfigured();
     return `https://${env.AWS_S3_BUCKET}.s3.${env.AWS_REGION}.amazonaws.com/${key}`;

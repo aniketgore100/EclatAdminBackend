@@ -23,20 +23,28 @@ export interface CreateProductInput {
   badges?: string[];
   codAllowed?: boolean;
   insured?: boolean;
+  typeId?: string;
+  polishId?: string;
+  stoneId?: string;
+  occasions?: string[];
+  displaySoldCount?: number;
   pearlType?: string;
   pearlGrade?: string;
   pearlSizeMm?: number;
-  pearlColour?: string;
+  pearlColourId?: string;
   pearlLustre?: string;
   pond?: string;
   harvestBatch?: string;
   monthsInWater?: number;
   setting?: string;
   purity?: string;
+  attributes?: { label: string; value: string }[];
   seoTitle?: string;
   seoMeta?: string;
   seoOgImage?: string;
 }
+
+export type UpdateProductInput = Partial<CreateProductInput>;
 
 export const productService = {
   create(data: CreateProductInput) {
@@ -54,9 +62,16 @@ export const productService = {
     return product;
   },
 
+  async update(id: string, data: UpdateProductInput) {
+    await this.getById(id); // 404s if the product doesn't exist
+    return productRepository.update(id, data);
+  },
+
   async presignImage(id: string, contentType: string) {
     await this.getById(id); // 404s if the product doesn't exist
-    const key = uploadService.buildKey(`products/${id}`, contentType);
+    // Stable key: re-uploading this product's primary photo overwrites the
+    // same S3 object rather than piling up a new one on every upload.
+    const key = uploadService.buildStableKey(`products/${id}`, "primary", contentType);
     const { uploadUrl, publicUrl } = await uploadService.createPresignedUpload(key, contentType);
     return { uploadUrl, key, publicUrl };
   },
@@ -67,8 +82,7 @@ export const productService = {
       throw new AppError(400, "INVALID_UPLOAD_KEY", "Upload key does not belong to this product");
     }
     const url = uploadService.buildPublicUrl(key);
-    const position = await productRepository.countImages(id);
-    return productRepository.createImage({ productId: id, url, alt, position });
+    return productRepository.upsertPrimaryImage(id, url, alt);
   },
 
   async createVariant(
@@ -98,5 +112,17 @@ export const productService = {
       onHand: data.onHand ?? 0,
       lowStockThreshold: data.lowStockThreshold ?? 5,
     });
+  },
+
+  async updateVariant(
+    productId: string,
+    variantId: string,
+    data: { price?: number; mrp?: number; onHand?: number; status?: "ACTIVE" | "ARCHIVED" }
+  ) {
+    const variant = await productRepository.findVariant(variantId);
+    if (!variant || variant.productId !== productId) {
+      throw NotFoundError("Variant not found", "VARIANT_NOT_FOUND");
+    }
+    return productRepository.updateVariant(variantId, data);
   },
 };

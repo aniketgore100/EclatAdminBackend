@@ -11,13 +11,28 @@ function slugify(name: string): string {
 }
 
 export const categoryService = {
-  create(data: { name: string; slug?: string; description?: string; position?: number }) {
+  create(data: {
+    name: string;
+    slug?: string;
+    description?: string;
+    eyebrow?: string;
+    title?: string;
+    text?: string;
+    caption?: string;
+    position?: number;
+    categoryTabId?: string;
+  }) {
     const slug = data.slug?.trim() || slugify(data.name);
     return categoryRepository.create({
       name: data.name,
       slug,
       description: data.description,
+      eyebrow: data.eyebrow,
+      title: data.title,
+      text: data.text,
+      caption: data.caption,
       position: data.position ?? 0,
+      categoryTabId: data.categoryTabId,
     });
   },
 
@@ -31,16 +46,35 @@ export const categoryService = {
     return category;
   },
 
+  async update(
+    id: string,
+    data: {
+      name?: string;
+      slug?: string;
+      description?: string;
+      eyebrow?: string;
+      title?: string;
+      text?: string;
+      caption?: string;
+      position?: number;
+      status?: "DRAFT" | "ACTIVE" | "ARCHIVED";
+      categoryTabId?: string;
+    }
+  ) {
+    await this.getById(id); // 404s if the category doesn't exist
+    return categoryRepository.update(id, data);
+  },
+
   async presignImage(id: string, field: "image" | "banner", contentType: string) {
     await this.getById(id); // 404s if the category doesn't exist
-    const key = uploadService.buildKey(`categories/${id}`, contentType);
+    const key = uploadService.buildKey(`categories/${id}/${field}`, contentType);
     const { uploadUrl, publicUrl } = await uploadService.createPresignedUpload(key, contentType);
     return { uploadUrl, key, publicUrl, field };
   },
 
   async confirmImage(id: string, field: "image" | "banner", key: string) {
     await this.getById(id); // 404s if the category doesn't exist
-      if (!key.startsWith(`categories/${id}/`)) {
+    if (!key.startsWith(`categories/${id}/${field}/`)) {
       throw new AppError(400, "INVALID_UPLOAD_KEY", "Upload key does not belong to this category");
     }
     const url = uploadService.buildPublicUrl(key);

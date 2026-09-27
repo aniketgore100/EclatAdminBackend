@@ -24,19 +24,99 @@ enum ReviewStatus {
   REJECTED
 }
 
-model Category {
-  id          String        @id @default(uuid())
-  name        String
-  slug        String        @unique
-  image       String?
-  banner      String?
-  description String?
-  position    Int           @default(0)
-  status      ProductStatus @default(ACTIVE)
-  products    Product[]
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
 
+model ProductType {
+  id        String    @id @default(uuid())
+  name      String
+  slug      String    @unique
+  position  Int       @default(0)
+  isActive  Boolean   @default(true)
+  products  Product[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@map("product_types")
+}
+
+model Polish {
+  id        String    @id @default(uuid())
+  name      String
+  slug      String    @unique
+  position  Int       @default(0)
+  isActive  Boolean   @default(true)
+  products  Product[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@map("polishes")
+}
+
+model Stone {
+  id        String    @id @default(uuid())
+  name      String
+  slug      String    @unique
+  position  Int       @default(0)
+  isActive  Boolean   @default(true)
+  products  Product[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@map("stones")
+}
+
+model PearlColour {
+  id        String    @id @default(uuid())
+  name      String
+  slug      String    @unique
+  hex       String?
+  position  Int       @default(0)
+  isActive  Boolean   @default(true)
+  products  Product[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@map("pearl_colours")
+}
+
+// Admin-managed grouping for the Catalogue view's tab bar (e.g. "Live
+// Collection", "Featured Collection") — a new tab can be created from the
+// admin UI at any time, the list is never fixed in code.
+model CategoryTab {
+  id         String     @id @default(uuid())
+  name       String
+  slug       String     @unique
+  position   Int        @default(0)
+  isActive   Boolean    @default(true)
+  categories Category[]
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  @@map("category_tabs")
+}
+
+model Category {
+  id            String        @id @default(uuid())
+  name          String
+  slug          String        @unique
+  // Home page tile thumbnail (circular crop, e.g. the "Office & daily" tile).
+  image         String?
+  // Hero banner shown at the top of this category's own page — deliberately
+  // a different image from `image` (wide vs. tile-cropped shot).
+  banner        String?
+  description   String?
+  eyebrow       String?
+  title         String?
+  text          String?
+  caption       String?
+  position      Int           @default(0)
+  status        ProductStatus @default(ACTIVE)
+  categoryTabId String?
+  categoryTab   CategoryTab?  @relation(fields: [categoryTabId], references: [id])
+  products      Product[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([categoryTabId])
   @@map("categories")
 }
 
@@ -61,13 +141,23 @@ model Product {
   pearlType     String?
   pearlGrade    String?
   pearlSizeMm   Float?
-  pearlColour   String?
+  pearlColourId String?
+  pearlColour   PearlColour? @relation(fields: [pearlColourId], references: [id])
   pearlLustre   String?
   pond          String?
   harvestBatch  String?
   monthsInWater Int?
   setting       String?
   purity        String?
+  typeId    String?
+  type      ProductType? @relation(fields: [typeId], references: [id])
+  polishId  String?
+  polish    Polish?      @relation(fields: [polishId], references: [id])
+  stoneId   String?
+  stone     Stone?       @relation(fields: [stoneId], references: [id])
+  occasions String[]     @default([])
+
+  displaySoldCount Int?
 
   codAllowed Boolean @default(true)
   insured    Boolean @default(true)
@@ -79,11 +169,16 @@ model Product {
   optionTypes OptionType[]
   variants    Variant[]
   reviews     Review[]
+  attributes  ProductAttribute[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([categoryId])
+  @@index([typeId])
+  @@index([polishId])
+  @@index([stoneId])
+  @@index([pearlColourId])
   @@map("products")
 }
 
@@ -99,6 +194,22 @@ model ProductImage {
 
   @@index([productId])
   @@map("product_images")
+}
+
+// Free-form per-product spec rows (e.g. "Chain Length" on a necklace,
+// "Post Type" on an earring) — deliberately not fixed columns, since which
+// properties apply varies by product/category. Admin adds exactly the rows
+// that make sense for a given piece; the PDP renders whatever's there.
+model ProductAttribute {
+  id        String  @id @default(uuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  label     String
+  value     String
+  position  Int     @default(0)
+
+  @@index([productId])
+  @@map("product_attributes")
 }
 
 model OptionType {
@@ -255,9 +366,73 @@ model Content {
   @@map("content")
 }
 
-// Admin (Eclat-Admin) tables — same database, PRD §11A. Owner/Staff roles
-// per PRD §2; no role-gating logic built yet, field exists so sessions can
-// carry it from day one.
+// Every homepage (and site-chrome) block, admin-editable. `content`/`settings`
+// are the DRAFT the admin UI edits; `published*` is the mirror the public
+// storefront reads — Publish just copies draft -> published in one write, so
+// there's always a stable live version while a draft is being worked on.
+// HEADER / ANNOUNCEMENT_BAR / FOOTER render on every page (not just home) —
+// the admin UI pins them (no reorder/duplicate/delete), only content edits.
+enum HomepageSectionType {
+  ANNOUNCEMENT_BAR
+  HEADER
+  HERO
+  TRUST_STRIP
+  CATEGORY_NAV
+  HIGHLIGHTS
+  ECLAT_EDIT
+  BANNER
+  OCCASIONS
+  FEATURED_COLLECTION
+  CURATED_EDITS
+  PEARL_MOOD
+  SHOP_THE_LOOK
+  TESTIMONIALS
+  JOURNAL
+  PEARL_GUIDE
+  MOST_SEARCHED
+  NEWSLETTER
+  FOOTER
+}
+
+model HomepageSection {
+  id   String              @id @default(uuid())
+  type HomepageSectionType
+  // Stable slug so multiple instances of the same type can coexist (e.g.
+  // three FEATURED_COLLECTION sections: Moonlit / Morning Dew / Tide).
+  key  String              @unique
+  name String
+
+  order    Int     @default(0)
+  enabled  Boolean @default(true)
+  content  Json
+  settings Json?
+
+  publishedOrder    Int?
+  publishedEnabled  Boolean?
+  publishedContent  Json?
+  publishedSettings Json?
+  publishedAt       DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([type])
+  @@map("homepage_sections")
+}
+
+// Lets the admin "Preview" button open the real storefront showing DRAFT
+// content instead of the published homepage — a random, short-lived token
+// row both backends can see (they share this database), so no secret needs
+// to be coordinated between the two separate services.
+model HomepagePreviewToken {
+  token     String   @id @default(uuid())
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@map("homepage_preview_tokens")
+}
+
+
 enum AdminRole {
   OWNER
   STAFF
